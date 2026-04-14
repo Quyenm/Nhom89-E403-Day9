@@ -1,6 +1,6 @@
 # Báo Cáo Cá Nhân — Lab Day 09: Multi-Agent Orchestration
 
-**Họ và tên:** Vũ Quang Dũng  
+**Họ và tên:** Vũ Quang Dũng  - 2A202600442
 **Vai trò trong nhóm:** Worker Owner (Synthesis)  
 **Ngày nộp:** 14/04/2026
 
