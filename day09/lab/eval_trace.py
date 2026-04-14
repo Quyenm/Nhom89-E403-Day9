@@ -77,11 +77,9 @@ def analyze_traces(traces_dir: str = "artifacts/traces") -> dict:
         os.path.join(traces_dir, name) for name in os.listdir(traces_dir) if name.endswith(".json")
     )
     traces = []
-    for path in trace_files:
-        with open(path, encoding="utf-8") as handle:
-            traces.append(json.load(handle))
-    if not traces:
-        return {}
+    for fname in trace_files:
+        with open(os.path.join(traces_dir, fname), encoding="utf-8") as f:
+            traces.append(json.load(f))
 
     routing_counter = Counter(trace.get("supervisor_route", "unknown") for trace in traces)
     source_counter = Counter()
@@ -136,8 +134,8 @@ def compare_single_vs_multi(
         "note": "Day 08 baseline file was not provided in this workspace.",
     }
     if day08_results_file and os.path.exists(day08_results_file):
-        with open(day08_results_file, encoding="utf-8") as handle:
-            day08 = json.load(handle)
+        with open(day08_results_file, encoding="utf-8") as f:
+            day08_baseline = json.load(f)
 
     return {
         "generated_at": datetime.now().isoformat(),
@@ -168,12 +166,11 @@ def print_metrics(metrics: dict) -> None:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--grading", action="store_true")
-    parser.add_argument("--analyze", action="store_true")
-    parser.add_argument("--compare", action="store_true")
-    parser.add_argument("--test-file", default="data/test_questions.json")
-    parser.add_argument("--day08-file")
+    parser = argparse.ArgumentParser(description="Day 09 Lab — Trace Evaluation")
+    parser.add_argument("--grading", action="store_true", help="Run grading questions")
+    parser.add_argument("--analyze", action="store_true", help="Analyze existing traces")
+    parser.add_argument("--compare", action="store_true", help="Compare single vs multi")
+    parser.add_argument("--test-file", default="data/grading_questions.json", help="Test questions file")
     args = parser.parse_args()
 
     if args.grading:
