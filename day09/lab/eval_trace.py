@@ -1,359 +1,192 @@
 """
 eval_trace.py — Trace Evaluation & Comparison
-Sprint 4: Chạy pipeline với test questions, phân tích trace, so sánh single vs multi.
-
-Chạy:
-    python eval_trace.py                  # Chạy 15 test questions
-    python eval_trace.py --grading        # Chạy grading questions (sau 17:00)
-    python eval_trace.py --analyze        # Phân tích trace đã có
-    python eval_trace.py --compare        # So sánh single vs multi
-
-Outputs:
-    artifacts/traces/          — trace của từng câu hỏi
-    artifacts/grading_run.jsonl — log câu hỏi chấm điểm
-    artifacts/eval_report.json  — báo cáo tổng kết
 """
 
+from __future__ import annotations
+
+import argparse
 import json
 import os
+import statistics
 import sys
-import argparse
+from collections import Counter
 from datetime import datetime
 from typing import Optional
 
-# Import graph
 sys.path.insert(0, os.path.dirname(__file__))
 from graph import run_graph, save_trace
 
 
-# ─────────────────────────────────────────────
-# 1. Run Pipeline on Test Questions
-# ─────────────────────────────────────────────
-
 def run_test_questions(questions_file: str = "data/test_questions.json") -> list:
-    """
-    Chạy pipeline với danh sách câu hỏi, lưu trace từng câu.
+    with open(questions_file, encoding="utf-8") as handle:
+        questions = json.load(handle)
 
-    Returns:
-        list of (question, result) tuples
-    """
-    with open(questions_file, encoding="utf-8") as f:
-        questions = json.load(f)
-
-    print(f"\n📋 Running {len(questions)} test questions from {questions_file}")
-    print("=" * 60)
-
+    os.makedirs("artifacts/traces", exist_ok=True)
     results = []
-    for i, q in enumerate(questions, 1):
-        question_text = q["question"]
-        q_id = q.get("id", f"q{i:02d}")
+    print(f"Running {len(questions)} questions from {questions_file}")
 
-        print(f"[{i:02d}/{len(questions)}] {q_id}: {question_text[:65]}...")
-
-        try:
-            result = run_graph(question_text)
-            result["question_id"] = q_id
-
-            # Save individual trace
-            trace_file = save_trace(result, f"artifacts/traces")
-            print(f"  ✓ route={result.get('supervisor_route', '?')}, "
-                  f"conf={result.get('confidence', 0):.2f}, "
-                  f"{result.get('latency_ms', 0)}ms")
-
-            results.append({
-                "id": q_id,
-                "question": question_text,
-                "expected_answer": q.get("expected_answer", ""),
-                "expected_sources": q.get("expected_sources", []),
-                "difficulty": q.get("difficulty", "unknown"),
-                "category": q.get("category", "unknown"),
-                "result": result,
-            })
-
-        except Exception as e:
-            print(f"  ✗ ERROR: {e}")
-            results.append({
-                "id": q_id,
-                "question": question_text,
-                "error": str(e),
-                "result": None,
-            })
-
-    print(f"\n✅ Done. {sum(1 for r in results if r.get('result'))} / {len(results)} succeeded.")
+    for index, item in enumerate(questions, start=1):
+        question = item["question"]
+        result = run_graph(question)
+        result["question_id"] = item.get("id", f"q{index:02d}")
+        trace_file = save_trace(result, "artifacts/traces")
+        print(
+            f"[{index:02d}] {result['question_id']} route={result['supervisor_route']} "
+            f"conf={result['confidence']:.2f} latency={result['latency_ms']}ms trace={trace_file}"
+        )
+        results.append({"question": item, "result": result})
     return results
 
 
-# ─────────────────────────────────────────────
-# 2. Run Grading Questions (Sprint 4)
-# ─────────────────────────────────────────────
-
 def run_grading_questions(questions_file: str = "data/grading_questions.json") -> str:
-    """
-    Chạy pipeline với grading questions và lưu JSONL log.
-    Dùng cho chấm điểm nhóm (chạy sau khi grading_questions.json được public lúc 17:00).
-
-    Returns:
-        path tới grading_run.jsonl
-    """
     if not os.path.exists(questions_file):
-        print(f"❌ {questions_file} chưa được public (sau 17:00 mới có).")
+        print(f"{questions_file} not found.")
         return ""
 
-    with open(questions_file, encoding="utf-8") as f:
-        questions = json.load(f)
+    with open(questions_file, encoding="utf-8") as handle:
+        questions = json.load(handle)
 
     os.makedirs("artifacts", exist_ok=True)
     output_file = "artifacts/grading_run.jsonl"
-
-    print(f"\n🎯 Running GRADING questions — {len(questions)} câu")
-    print(f"   Output → {output_file}")
-    print("=" * 60)
-
     with open(output_file, "w", encoding="utf-8") as out:
-        for i, q in enumerate(questions, 1):
-            q_id = q.get("id", f"gq{i:02d}")
-            question_text = q["question"]
-            print(f"[{i:02d}/{len(questions)}] {q_id}: {question_text[:65]}...")
-
-            try:
-                result = run_graph(question_text)
-                record = {
-                    "id": q_id,
-                    "question": question_text,
-                    "answer": result.get("final_answer", "PIPELINE_ERROR: no answer"),
-                    "sources": result.get("retrieved_sources", []),
-                    "supervisor_route": result.get("supervisor_route", ""),
-                    "route_reason": result.get("route_reason", ""),
-                    "workers_called": result.get("workers_called", []),
-                    "mcp_tools_used": [t.get("tool") for t in result.get("mcp_tools_used", [])],
-                    "confidence": result.get("confidence", 0.0),
-                    "hitl_triggered": result.get("hitl_triggered", False),
-                    "latency_ms": result.get("latency_ms"),
-                    "timestamp": datetime.now().isoformat(),
-                }
-                print(f"  ✓ route={record['supervisor_route']}, conf={record['confidence']:.2f}")
-            except Exception as e:
-                record = {
-                    "id": q_id,
-                    "question": question_text,
-                    "answer": f"PIPELINE_ERROR: {e}",
-                    "sources": [],
-                    "supervisor_route": "error",
-                    "route_reason": str(e),
-                    "workers_called": [],
-                    "mcp_tools_used": [],
-                    "confidence": 0.0,
-                    "hitl_triggered": False,
-                    "latency_ms": None,
-                    "timestamp": datetime.now().isoformat(),
-                }
-                print(f"  ✗ ERROR: {e}")
-
+        for item in questions:
+            result = run_graph(item["question"])
+            record = {
+                "id": item["id"],
+                "question": item["question"],
+                "answer": result.get("final_answer", ""),
+                "sources": result.get("sources", []),
+                "supervisor_route": result.get("supervisor_route", ""),
+                "route_reason": result.get("route_reason", ""),
+                "workers_called": result.get("workers_called", []),
+                "mcp_tools_used": [entry.get("tool") for entry in result.get("mcp_tools_used", [])],
+                "confidence": result.get("confidence", 0.0),
+                "hitl_triggered": result.get("hitl_triggered", False),
+                "timestamp": datetime.now().isoformat(),
+            }
             out.write(json.dumps(record, ensure_ascii=False) + "\n")
-
-    print(f"\n✅ Grading log saved → {output_file}")
+    print(output_file)
     return output_file
 
 
-# ─────────────────────────────────────────────
-# 3. Analyze Traces
-# ─────────────────────────────────────────────
-
 def analyze_traces(traces_dir: str = "artifacts/traces") -> dict:
-    """
-    Đọc tất cả trace files và tính metrics tổng hợp.
-
-    Metrics:
-    - routing_distribution: % câu đi vào mỗi worker
-    - avg_confidence: confidence trung bình
-    - avg_latency_ms: latency trung bình
-    - mcp_usage_rate: % câu có MCP tool call
-    - hitl_rate: % câu trigger HITL
-    - source_coverage: các tài liệu nào được dùng nhiều nhất
-
-    Returns:
-        dict of metrics
-    """
     if not os.path.exists(traces_dir):
-        print(f"⚠️  {traces_dir} không tồn tại. Chạy run_test_questions() trước.")
         return {}
 
-    trace_files = [f for f in os.listdir(traces_dir) if f.endswith(".json")]
-    if not trace_files:
-        print(f"⚠️  Không có trace files trong {traces_dir}.")
-        return {}
-
+    trace_files = sorted(
+        os.path.join(traces_dir, name) for name in os.listdir(traces_dir) if name.endswith(".json")
+    )
     traces = []
-    for fname in trace_files:
-        with open(os.path.join(traces_dir, fname)) as f:
-            traces.append(json.load(f))
+    for path in trace_files:
+        with open(path, encoding="utf-8") as handle:
+            traces.append(json.load(handle))
+    if not traces:
+        return {}
 
-    # Compute metrics
-    routing_counts = {}
+    routing_counter = Counter(trace.get("supervisor_route", "unknown") for trace in traces)
+    source_counter = Counter()
+    mcp_counter = Counter()
     confidences = []
     latencies = []
-    mcp_calls = 0
-    hitl_triggers = 0
-    source_counts = {}
+    hitl_count = 0
+    abstain_count = 0
+    multi_worker_count = 0
 
-    for t in traces:
-        route = t.get("supervisor_route", "unknown")
-        routing_counts[route] = routing_counts.get(route, 0) + 1
-
-        conf = t.get("confidence", 0)
-        if conf:
-            confidences.append(conf)
-
-        lat = t.get("latency_ms")
-        if lat:
-            latencies.append(lat)
-
-        if t.get("mcp_tools_used"):
-            mcp_calls += 1
-
-        if t.get("hitl_triggered"):
-            hitl_triggers += 1
-
-        for src in t.get("retrieved_sources", []):
-            source_counts[src] = source_counts.get(src, 0) + 1
+    for trace in traces:
+        confidences.append(trace.get("confidence", 0.0))
+        if trace.get("latency_ms") is not None:
+            latencies.append(trace["latency_ms"])
+        if trace.get("hitl_triggered"):
+            hitl_count += 1
+        if "Không đủ thông tin" in trace.get("final_answer", ""):
+            abstain_count += 1
+        if len(set(trace.get("workers_called", []))) >= 3:
+            multi_worker_count += 1
+        for source in trace.get("sources", []) or trace.get("retrieved_sources", []):
+            source_counter[source] += 1
+        for entry in trace.get("mcp_tools_used", []):
+            mcp_counter[entry.get("tool", "unknown")] += 1
 
     total = len(traces)
-    metrics = {
+    return {
+        "generated_at": datetime.now().isoformat(),
         "total_traces": total,
-        "routing_distribution": {k: f"{v}/{total} ({100*v//total}%)" for k, v in routing_counts.items()},
-        "avg_confidence": round(sum(confidences) / len(confidences), 3) if confidences else 0,
-        "avg_latency_ms": round(sum(latencies) / len(latencies)) if latencies else 0,
-        "mcp_usage_rate": f"{mcp_calls}/{total} ({100*mcp_calls//total}%)" if total else "0%",
-        "hitl_rate": f"{hitl_triggers}/{total} ({100*hitl_triggers//total}%)" if total else "0%",
-        "top_sources": sorted(source_counts.items(), key=lambda x: -x[1])[:5],
+        "routing_distribution": {
+            route: {"count": count, "percent": round((count / total) * 100, 1)}
+            for route, count in routing_counter.items()
+        },
+        "avg_confidence": round(statistics.mean(confidences), 3),
+        "avg_latency_ms": round(statistics.mean(latencies), 1) if latencies else 0,
+        "median_latency_ms": round(statistics.median(latencies), 1) if latencies else 0,
+        "mcp_usage_rate": round((sum(1 for trace in traces if trace.get("mcp_tools_used")) / total) * 100, 1),
+        "mcp_tool_counts": dict(mcp_counter),
+        "hitl_rate": round((hitl_count / total) * 100, 1),
+        "abstain_rate": round((abstain_count / total) * 100, 1),
+        "multi_worker_rate": round((multi_worker_count / total) * 100, 1),
+        "top_sources": source_counter.most_common(5),
     }
 
-    return metrics
-
-
-# ─────────────────────────────────────────────
-# 4. Compare Single vs Multi Agent
-# ─────────────────────────────────────────────
 
 def compare_single_vs_multi(
-    multi_traces_dir: str = "artifacts/traces",
-    day08_results_file: Optional[str] = None,
+    multi_traces_dir: str = "artifacts/traces", day08_results_file: Optional[str] = None
 ) -> dict:
-    """
-    So sánh Day 08 (single agent RAG) vs Day 09 (multi-agent).
-
-    TODO Sprint 4: Điền kết quả thực tế từ Day 08 vào day08_baseline.
-
-    Returns:
-        dict của comparison metrics
-    """
-    multi_metrics = analyze_traces(multi_traces_dir)
-
-    # TODO: Load Day 08 results nếu có
-    # Nếu không có, dùng baseline giả lập để format
-    day08_baseline = {
-        "total_questions": 15,
-        "avg_confidence": 0.0,          # TODO: Điền từ Day 08 eval.py
-        "avg_latency_ms": 0,            # TODO: Điền từ Day 08
-        "abstain_rate": "?",            # TODO: Điền từ Day 08
-        "multi_hop_accuracy": "?",      # TODO: Điền từ Day 08
+    day09 = analyze_traces(multi_traces_dir)
+    day08 = {
+        "status": "N/A",
+        "note": "Day 08 baseline file was not provided in this workspace.",
     }
-
     if day08_results_file and os.path.exists(day08_results_file):
-        with open(day08_results_file) as f:
-            day08_baseline = json.load(f)
+        with open(day08_results_file, encoding="utf-8") as handle:
+            day08 = json.load(handle)
 
-    comparison = {
+    return {
         "generated_at": datetime.now().isoformat(),
-        "day08_single_agent": day08_baseline,
-        "day09_multi_agent": multi_metrics,
+        "day08_single_agent": day08,
+        "day09_multi_agent": day09,
         "analysis": {
-            "routing_visibility": "Day 09 có route_reason cho từng câu → dễ debug hơn Day 08",
-            "latency_delta": "TODO: Điền delta latency thực tế",
-            "accuracy_delta": "TODO: Điền delta accuracy thực tế từ grading",
-            "debuggability": "Multi-agent: có thể test từng worker độc lập. Single-agent: không thể.",
-            "mcp_benefit": "Day 09 có thể extend capability qua MCP không cần sửa core. Day 08 phải hard-code.",
+            "routing_visibility": "Day 09 records supervisor_route and route_reason for every run.",
+            "debuggability": "Workers can be tested independently and each appends its own worker_io_logs entry.",
+            "latency_tradeoff": "The multi-agent pipeline adds orchestration overhead but exposes where time is spent.",
+            "mcp_benefit": "Policy questions can add tool capability without changing the graph core.",
         },
     }
 
-    return comparison
-
-
-# ─────────────────────────────────────────────
-# 5. Save Eval Report
-# ─────────────────────────────────────────────
 
 def save_eval_report(comparison: dict) -> str:
-    """Lưu báo cáo eval tổng kết ra file JSON."""
     os.makedirs("artifacts", exist_ok=True)
     output_file = "artifacts/eval_report.json"
-    with open(output_file, "w", encoding="utf-8") as f:
-        json.dump(comparison, f, ensure_ascii=False, indent=2)
+    with open(output_file, "w", encoding="utf-8") as handle:
+        json.dump(comparison, handle, ensure_ascii=False, indent=2)
     return output_file
 
 
-# ─────────────────────────────────────────────
-# 6. CLI Entry Point
-# ─────────────────────────────────────────────
-
-def print_metrics(metrics: dict):
-    """Print metrics đẹp."""
+def print_metrics(metrics: dict) -> None:
     if not metrics:
+        print("No traces available.")
         return
-    print("\n📊 Trace Analysis:")
-    for k, v in metrics.items():
-        if isinstance(v, list):
-            print(f"  {k}:")
-            for item in v:
-                print(f"    • {item}")
-        elif isinstance(v, dict):
-            print(f"  {k}:")
-            for kk, vv in v.items():
-                print(f"    {kk}: {vv}")
-        else:
-            print(f"  {k}: {v}")
+    print(json.dumps(metrics, ensure_ascii=False, indent=2))
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Day 09 Lab — Trace Evaluation")
-    parser.add_argument("--grading", action="store_true", help="Run grading questions")
-    parser.add_argument("--analyze", action="store_true", help="Analyze existing traces")
-    parser.add_argument("--compare", action="store_true", help="Compare single vs multi")
-    parser.add_argument("--test-file", default="data/test_questions.json", help="Test questions file")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--grading", action="store_true")
+    parser.add_argument("--analyze", action="store_true")
+    parser.add_argument("--compare", action="store_true")
+    parser.add_argument("--test-file", default="data/test_questions.json")
+    parser.add_argument("--day08-file")
     args = parser.parse_args()
 
     if args.grading:
-        # Chạy grading questions
-        log_file = run_grading_questions()
-        if log_file:
-            print(f"\n✅ Grading log: {log_file}")
-            print("   Nộp file này trước 18:00!")
-
+        run_grading_questions()
     elif args.analyze:
-        # Phân tích traces
-        metrics = analyze_traces()
-        print_metrics(metrics)
-
+        print_metrics(analyze_traces())
     elif args.compare:
-        # So sánh single vs multi
-        comparison = compare_single_vs_multi()
-        report_file = save_eval_report(comparison)
-        print(f"\n📊 Comparison report saved → {report_file}")
-        print("\n=== Day 08 vs Day 09 ===")
-        for k, v in comparison.get("analysis", {}).items():
-            print(f"  {k}: {v}")
-
+        report = compare_single_vs_multi(day08_results_file=args.day08_file)
+        print_metrics(report)
+        print(save_eval_report(report))
     else:
-        # Default: chạy test questions
-        results = run_test_questions(args.test_file)
-
-        # Phân tích trace
+        run_test_questions(args.test_file)
         metrics = analyze_traces()
         print_metrics(metrics)
-
-        # Lưu báo cáo
-        comparison = compare_single_vs_multi()
-        report_file = save_eval_report(comparison)
-        print(f"\n📄 Eval report → {report_file}")
-        print("\n✅ Sprint 4 complete!")
-        print("   Next: Điền docs/ templates và viết reports/")
+        report = compare_single_vs_multi(day08_results_file=args.day08_file)
+        print(save_eval_report(report))
