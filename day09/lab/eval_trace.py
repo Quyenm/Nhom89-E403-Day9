@@ -185,7 +185,7 @@ def analyze_traces(traces_dir: str = "artifacts/traces") -> dict:
 
     traces = []
     for fname in trace_files:
-        with open(os.path.join(traces_dir, fname)) as f:
+        with open(os.path.join(traces_dir, fname), encoding="utf-8") as f:
             traces.append(json.load(f))
 
     # Compute metrics
@@ -260,7 +260,7 @@ def compare_single_vs_multi(
     }
 
     if day08_results_file and os.path.exists(day08_results_file):
-        with open(day08_results_file) as f:
+        with open(day08_results_file, encoding="utf-8") as f:
             day08_baseline = json.load(f)
 
     comparison = {
@@ -319,7 +319,7 @@ if __name__ == "__main__":
     parser.add_argument("--grading", action="store_true", help="Run grading questions")
     parser.add_argument("--analyze", action="store_true", help="Analyze existing traces")
     parser.add_argument("--compare", action="store_true", help="Compare single vs multi")
-    parser.add_argument("--test-file", default="data/test_questions.json", help="Test questions file")
+    parser.add_argument("--test-file", default="data/grading_questions.json", help="Test questions file")
     args = parser.parse_args()
 
     if args.grading:

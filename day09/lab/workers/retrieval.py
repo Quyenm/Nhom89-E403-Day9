@@ -20,6 +20,7 @@ import hashlib
 import os
 import re
 from functools import lru_cache
+from utils.normalize import normalize as _normalize  ######################### modded by NguyenTienDat - 2A202600217 #########################
 
 WORKER_NAME = "retrieval_worker"
 DEFAULT_TOP_K = 3
@@ -28,82 +29,82 @@ CHROMA_PATH = "./chroma_db"
 DOCS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "docs")
 TOKEN_RE = re.compile(r"[a-z0-9#@:/.-]+", re.IGNORECASE)
 
-
-def _normalize(text: str) -> str:
-    replacements = str.maketrans(
-        {
-            "à": "a",
-            "á": "a",
-            "ạ": "a",
-            "ả": "a",
-            "ã": "a",
-            "â": "a",
-            "ầ": "a",
-            "ấ": "a",
-            "ậ": "a",
-            "ẩ": "a",
-            "ẫ": "a",
-            "ă": "a",
-            "ằ": "a",
-            "ắ": "a",
-            "ặ": "a",
-            "ẳ": "a",
-            "ẵ": "a",
-            "è": "e",
-            "é": "e",
-            "ẹ": "e",
-            "ẻ": "e",
-            "ẽ": "e",
-            "ê": "e",
-            "ề": "e",
-            "ế": "e",
-            "ệ": "e",
-            "ể": "e",
-            "ễ": "e",
-            "ì": "i",
-            "í": "i",
-            "ị": "i",
-            "ỉ": "i",
-            "ĩ": "i",
-            "ò": "o",
-            "ó": "o",
-            "ọ": "o",
-            "ỏ": "o",
-            "õ": "o",
-            "ô": "o",
-            "ồ": "o",
-            "ố": "o",
-            "ộ": "o",
-            "ổ": "o",
-            "ỗ": "o",
-            "ơ": "o",
-            "ờ": "o",
-            "ớ": "o",
-            "ợ": "o",
-            "ở": "o",
-            "ỡ": "o",
-            "ù": "u",
-            "ú": "u",
-            "ụ": "u",
-            "ủ": "u",
-            "ũ": "u",
-            "ư": "u",
-            "ừ": "u",
-            "ứ": "u",
-            "ự": "u",
-            "ử": "u",
-            "ữ": "u",
-            "ỳ": "y",
-            "ý": "y",
-            "ỵ": "y",
-            "ỷ": "y",
-            "ỹ": "y",
-            "đ": "d",
-        }
-    )
-    lowered = text.lower().translate(replacements)
-    return re.sub(r"\s+", " ", lowered).strip()
-
+######################### START modded by NguyenTienDat - 2A202600217 #########################
+# def _normalize(text: str) -> str:
+#     replacements = str.maketrans(
+#         {
+#             "à": "a",
+#             "á": "a",
+#             "ạ": "a",
+#             "ả": "a",
+#             "ã": "a",
+#             "â": "a",
+#             "ầ": "a",
+#             "ấ": "a",
+#             "ậ": "a",
+#             "ẩ": "a",
+#             "ẫ": "a",
+#             "ă": "a",
+#             "ằ": "a",
+#             "ắ": "a",
+#             "ặ": "a",
+#             "ẳ": "a",
+#             "ẵ": "a",
+#             "è": "e",
+#             "é": "e",
+#             "ẹ": "e",
+#             "ẻ": "e",
+#             "ẽ": "e",
+#             "ê": "e",
+#             "ề": "e",
+#             "ế": "e",
+#             "ệ": "e",
+#             "ể": "e",
+#             "ễ": "e",
+#             "ì": "i",
+#             "í": "i",
+#             "ị": "i",
+#             "ỉ": "i",
+#             "ĩ": "i",
+#             "ò": "o",
+#             "ó": "o",
+#             "ọ": "o",
+#             "ỏ": "o",
+#             "õ": "o",
+#             "ô": "o",
+#             "ồ": "o",
+#             "ố": "o",
+#             "ộ": "o",
+#             "ổ": "o",
+#             "ỗ": "o",
+#             "ơ": "o",
+#             "ờ": "o",
+#             "ớ": "o",
+#             "ợ": "o",
+#             "ở": "o",
+#             "ỡ": "o",
+#             "ù": "u",
+#             "ú": "u",
+#             "ụ": "u",
+#             "ủ": "u",
+#             "ũ": "u",
+#             "ư": "u",
+#             "ừ": "u",
+#             "ứ": "u",
+#             "ự": "u",
+#             "ử": "u",
+#             "ữ": "u",
+#             "ỳ": "y",
+#             "ý": "y",
+#             "ỵ": "y",
+#             "ỷ": "y",
+#             "ỹ": "y",
+#             "đ": "d",
+#         }
+#     )
+#     lowered = text.lower().translate(replacements)
+#     return re.sub(r"\s+", " ", lowered).strip()
+######################### END modded by NguyenTienDat - 2A202600217 #########################
 
 def _tokenize(text: str) -> set[str]:
     return set(TOKEN_RE.findall(_normalize(text)))
